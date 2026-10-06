@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unleashed — browser runtime probe</title>
+<style>
+body{margin:0;background:#111820;color:#e7eef7;font:16px/1.5 system-ui,sans-serif}
+main{max-width:780px;margin:8vh auto;padding:28px}
+h1{font-size:30px;line-height:1.2}p{color:#bac6d5}
+pre{white-space:pre-wrap;background:#1d2936;border-radius:8px;padding:20px}
+#status{font-weight:600;color:#b5d9ff}.pass{color:#9de2b8!important}.fail{color:#ffb2b2!important}
+</style>
+<main>
+<p>SONIC UNLEASHED · DEVELOPMENT</p>
+<h1>Browser runtime feasibility test</h1>
+<p>This executes a small WebAssembly probe using the upstream PPC context.
+It does not load or run the game.</p>
+<p id="status">Loading WebAssembly…</p>
+<pre id="log"></pre>
+<p id="graphics"></p>
+<p>Guest floating-point mode changes, guest timing, the renderer, audio and
+the complete memory/kernel integration remain unfinished.</p>
+</main>
+<script>
+var probePassed = false;
+var Module = {
+  print(message) {
+    document.querySelector('#log').textContent += message + '\n';
+    if (message.startsWith('PASS:')) probePassed = true;
+  },
+  printErr(message) { document.querySelector('#log').textContent += message + '\n'; },
+  onAbort(message) {
+    document.querySelector('#status').textContent = 'Runtime test failed: ' + message;
+    document.querySelector('#status').className = 'fail';
+  },
+  postRun: [() => {
+    document.querySelector('#status').textContent = probePassed ? 'Runtime probe passed' : 'Runtime test failed';
+    document.querySelector('#status').className = probePassed ? 'pass' : 'fail';
+  }]
+};
+(async () => {
+  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null;
+  document.querySelector('#graphics').textContent = adapter
+    ? 'WebGPU adapter detected. Game rendering has not been implemented.'
+    : 'No WebGPU adapter detected in this browser.';
+})().catch(error => {document.querySelector('#graphics').textContent = 'WebGPU check: ' + error.message;});
+</script>
+<script src="browser_core.js"></script>
+</html>

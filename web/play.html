@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sonic Unleashed · Windmill Isle Act 1</title>
+  <link rel="stylesheet" href="play.css">
+</head>
+<body>
+  <div id="stage">
+    <canvas id="screen" width="1280" height="720" aria-label="Sonic Unleashed Windmill Isle Act 1 rendered from original game data"></canvas>
+    <div id="loading"><span class="spinner"></span><p id="load-status">Loading original stage data…</p></div>
+    <div id="toast" role="status" hidden></div>
+    <div id="checkpoint-banner" role="status" hidden>CHECKPOINT</div>
+    <!-- Authentic Sonic Unleashed Xbox 360 HUD -->
+    <div id="hud" hidden aria-hidden="true">
+      <!-- Top-Left cluster: Sonic portrait & lives, TIME, SCORE -->
+      <div id="hud-top-left">
+        <div id="hud-lives-group">
+          <span id="hud-portrait" class="sprite"></span>
+          <b id="hud-lives-value">05</b>
+        </div>
+        <div id="hud-time-container">
+          <span class="hud-plate-tag">TIME</span>
+          <b id="hud-time-value" class="hud-digital">00:00:64</b>
+        </div>
+        <div id="hud-score-container">
+          <span class="hud-plate-tag">SCORE</span>
+          <b id="hud-score-value" class="hud-digital">00000000</b>
+        </div>
+      </div>
+
+      <!-- Bottom-Left cluster: Circular Speedometer & Segmented Ring Energy Boost Bar -->
+      <div id="hud-bottom-left">
+        <div id="hud-speedometer">
+          <div class="speedo-outer-ring"></div>
+          <div class="speedo-needle" id="speedo-needle"></div>
+          <span class="speedo-label-speed">SPEED</span>
+          <div class="speedo-rings-box">
+            <span class="speedo-rings-label">RINGS</span>
+            <b id="hud-rings-value">000</b>
+          </div>
+        </div>
+        <div id="hud-energy-container">
+          <span class="hud-energy-title">RING ENERGY</span>
+          <div id="hud-energy-bar">
+            <i class="seg seg-1"></i>
+            <i class="seg seg-2"></i>
+            <i class="seg seg-3"></i>
+            <i class="seg seg-4"></i>
+            <i class="seg seg-5"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legacy compat nodes for runtime handles -->
+      <div id="hud-gauge" class="sprite" hidden>
+        <i class="fill"></i>
+        <i class="chevron chevron-0"></i>
+        <i class="chevron chevron-1"></i>
+        <i class="chevron chevron-2"></i>
+      </div>
+      <span id="hud-rings" class="sprite" hidden></span>
+      <span id="hud-score-plate" class="sprite" hidden></span>
+      <span id="hud-score-label" class="label" hidden></span>
+      <span id="hud-time-plate" class="sprite" hidden></span>
+      <span id="hud-time-label" class="label" hidden></span>
+      <span id="hud-debug" class="value" hidden></span>
+    </div>
+
+    <!-- Chip (Light Gaia) Hint Dialog System matching original Xbox 360 game -->
+    <div id="chip-dialog" class="chip-hint-box" hidden>
+      <div class="chip-avatar-frame">
+        <img src="ui/chip_avatar.png" alt="Chip" class="chip-avatar-img">
+      </div>
+      <div class="chip-text-content">
+        <p id="chip-dialog-text">If you've got questions, hit the question mark! It'll give you a hint.</p>
+      </div>
+      <button id="chip-dismiss-btn" title="Dismiss hint">×</button>
+    </div>
+    <button id="hint-trigger-btn" title="Ask Chip for a hint (H)">?</button>
+
+    <div id="mission-hud" aria-live="polite">
+      <div id="mission-card">
+        <span id="mission-hud-kicker">DAYTIME STAGE</span>
+        <p id="mission-objective">Reach the goal ring</p>
+        <div id="mission-progress-bar"><i id="mission-progress-fill"></i></div>
+      </div>
+      <span id="mission-deaths">Deaths 0</span>
+      <div id="mission-boost-track"><i id="mission-boost"></i><span id="mission-boost-label">Boost 100%</span></div>
+    </div>
+    <div id="mission-intro" class="mission-panel" hidden>
+      <p class="mission-kicker">DAYTIME STAGE</p>
+      <h1 id="mission-name"></h1>
+      <p id="mission-intro-objective"></p>
+      <button id="mission-start">Start stage</button>
+      <a href="index.html?menu=1">Main menu</a>
+    </div>
+    <div id="mission-phase" role="status" hidden>
+      <div class="go-banner-text">READY</div>
+      <div class="rainbow-bead-ring" hidden>
+        <i class="bead b1"></i><i class="bead b2"></i><i class="bead b3"></i><i class="bead b4"></i>
+        <i class="bead b5"></i><i class="bead b6"></i><i class="bead b7"></i><i class="bead b8"></i>
+        <i class="bead b9"></i><i class="bead b10"></i><i class="bead b11"></i><i class="bead b12"></i>
+        <i class="bead b13"></i><i class="bead b14"></i><i class="bead b15"></i><i class="bead b16"></i>
+      </div>
+    </div>
+    <div id="death-fade" hidden></div>
+    <div id="mission-results" class="mission-panel" role="dialog" aria-label="Stage results" hidden>
+      <h1 id="mission-results-title">STAGE CLEAR</h1>
+      <div id="result-rank-container">
+        <div id="result-rank-badge" class="rank-badge rank-s">S</div>
+        <span id="result-rank-title">RANK</span>
+      </div>
+      <dl class="result-values">
+        <dt>TIME</dt><dd id="result-time">0:00.00</dd>
+        <dt>TIME BONUS</dt><dd id="result-time-bonus">+0</dd>
+        <dt>RINGS</dt><dd id="result-rings">0</dd>
+        <dt>RING BONUS</dt><dd id="result-ring-bonus">+0</dd>
+        <dt>ENEMIES</dt><dd id="result-enemies">0</dd>
+        <dt>ENEMY BONUS</dt><dd id="result-enemy-bonus">+0</dd>
+        <dt class="total-score-label">TOTAL SCORE</dt><dd id="result-total-score" class="total-score-value">0</dd>
+      </dl>
+      <p id="result-detail"></p>
+      <div class="result-actions">
+        <button id="mission-next" class="btn-primary" hidden>Next Mission</button>
+        <button id="mission-resume" hidden>Retry from checkpoint</button>
+        <button id="mission-retry">Restart stage</button>
+        <a href="index.html?menu=1&select=1">Stage select</a>
+        <a href="index.html?menu=1">Main menu</a>
+      </div>
+    </div>
+    <div id="pause-panel" hidden>
+      <h2>Paused</h2>
+      <p>Esc — resume</p>
+      <p>R — respawn</p>
+      <p>M — music</p>
+    </div>
+    <div id="help">W / ↑ run · A D / ← → steer · Space jump · Shift boost · Q E drift · M music · R checkpoint · Esc menu</div>
+    <a id="return-menu" href="index.html?menu=1">Main menu</a>
+    <output id="diagnostics" hidden data-state="loading" data-frames="0" data-errors="0" data-chunks="0"></output>
+  </div>
+  <script type="module" src="play.mjs"></script>
+</body>
+</html>

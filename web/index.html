@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sonic Unleashed</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><span class="wordmark">SONIC <strong>UNLEASHED</strong></span><span class="badge">WEB BUILD</span></header>
+  <main>
+    <div id="stage" class="stage">
+      <canvas id="screen" width="1280" height="720" aria-label="Sonic Unleashed menu rendered from original game assets"></canvas>
+      <div id="cinema" hidden><video id="movie" playsinline preload="metadata" aria-label="Original Sonic Unleashed movie"></video><button id="skip-movie">Skip movie · Enter / A</button></div>
+      <div id="loading" class="loading"><span class="spinner"></span><p id="load-status">Loading original menu assets…</p></div>
+      <div id="toast" role="status" hidden></div>
+    </div>
+    <div class="controls">
+      <div class="navigation">
+        <button id="enter" disabled>Enter main menu</button>
+        <button id="back" disabled>Back to title</button>
+        <button id="stages" disabled>Stage select</button>
+        <button id="demo" disabled>Watch title demo</button>
+        <button id="audio" disabled aria-pressed="false">Enable sound</button>
+      </div>
+      <div class="settings"><label>Volume <input id="volume" type="range" min="0" max="100" value="50" aria-label="Volume"></label><button id="fullscreen">Fullscreen</button></div>
+    </div>
+    <div id="actions" class="actions" hidden></div>
+    <output id="diagnostics" hidden data-state="loading" data-frames="0" data-errors="0"></output>
+    <div class="caption"><p id="help">Enter / A to open · arrows / D-pad to move · Escape / B to return</p><p>Original assets · Browser gameplay prototype</p></div>
+    <dialog id="scene-select" aria-labelledby="scene-title"><h2 id="scene-title">Stage select</h2><p>Explore the original daytime stages and towns.</p><div id="scene-list"></div><button id="close-scenes">Back</button></dialog>
+    <dialog id="options"><h2>Audio settings</h2><p>Use the volume control below the menu to change the browser audio level.</p><button id="close-options">Return to menu</button></dialog>
+  </main>
+  <script type="module" src="menu.mjs"></script>
+</body>
+</html>

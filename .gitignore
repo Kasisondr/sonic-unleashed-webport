@@ -1,0 +1,15 @@
+.tools/
+upstream/
+build/
+private/
+generated/
+dist/
+__pycache__/
+*.iso
+*.7z
+*.xex
+*.xexp
+*.ar
+.DS_Store
+*.log
+/web/chip_avatar.png

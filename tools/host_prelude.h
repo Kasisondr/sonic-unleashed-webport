@@ -1,0 +1,9 @@
+#pragma once
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <fstream>
+#include <map>
+#include <string>
+#include <vector>
+#include <xbox.h>
