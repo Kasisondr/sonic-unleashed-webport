@@ -1,5 +1,8 @@
 // WebGL2 scene: streams the exported terrain chunks and draws sky and props.
 import {Rig} from './pose.mjs';
+import {Postprocess} from './postprocess.mjs';
+import {Companion} from './companion.mjs';
+import {isWater, scatterGrass} from './vegetation.mjs';
 import {multiply, lookAt, orthographic, boundsVisible} from './render-math.mjs';
 import {LightField} from './light-field.mjs';
 
@@ -335,6 +338,10 @@ uniform vec3 cameraPosition;
 uniform vec3 skyColor;
 uniform float time;
 uniform float fogDensity;
+uniform sampler2D sceneColor;
+uniform sampler2D sceneDepth;
+uniform vec2 viewportSize;
+float linearDepth(float depth){return (.3*4200.0)/(4200.0-depth*(4200.0-.3));}
 out vec4 result;
 void main() {
   float t = time * 1.8;
@@ -368,14 +375,22 @@ void main() {
   float foam = smoothstep(0.32, 0.62, waveHeight + foamNoise * 0.14);
   vec3 foamColor = vec3(0.95, 0.98, 1.0);
 
+  vec2 screenUV=gl_FragCoord.xy/viewportSize;
+  float thickness=max(0.0,linearDepth(texture(sceneDepth,screenUV).r)-linearDepth(gl_FragCoord.z));
+  vec2 refractUV=clamp(screenUV+N.xz*.012*min(thickness*.2,1.0),vec2(.001),vec2(.999));
+  if(texture(sceneDepth,refractUV).r < gl_FragCoord.z) refractUV=screenUV;
+  vec3 submerged=texture(sceneColor,refractUV).rgb;
+  float shore=(1.0-smoothstep(.15,1.6,thickness))*(.65+.35*sin(worldPosition.x*2.0+worldPosition.z*1.4-t*2.0));
+  foam=max(foam*.3,shore);
   vec3 finalColor = mix(waterColor * (ambientSky + directSun), reflection, fresnel * 0.7);
+  finalColor = mix(submerged,finalColor,1.0-exp(-thickness*.22));
   finalColor += specular;
   finalColor = mix(finalColor, foamColor, foam * 0.5);
 
   float fog = 1.0 - exp(-pow(distanceFromCamera * fogDensity, 2.0));
   finalColor = mix(finalColor, skyColor, clamp(fog, 0.0, 1.0));
 
-  float alpha = mix(0.85, 0.98, fresnel + foam * 0.3);
+  float alpha = 1.0;
   result = vec4(finalColor, alpha);
 }`;
 
@@ -439,7 +454,9 @@ uniform float fogDensity;
 out vec4 result;
 
 void main() {
+  if (distanceFromCamera > 76.0) discard;
   if (flower > 0.5) {
+    if (flowerColorIndex < 0.5) discard;
     vec3 petal = (flowerColorIndex > 1.5) ? vec3(0.98, 0.98, 1.0) : vec3(1.0, 0.88, 0.22);
     if (length(uv - vec2(0.5, 0.5)) < 0.25 && flowerColorIndex > 1.5) petal = vec3(1.0, 0.78, 0.1);
     float fog = 1.0 - exp(-pow(distanceFromCamera * fogDensity, 2.0));
@@ -451,7 +468,10 @@ void main() {
   vec3 tipGreen = vec3(0.48, 0.82, 0.16);
   vec3 color = mix(baseGreen, tipGreen, heightFrac);
   float sun = max(0.0, dot(vec3(0.0, 1.0, 0.0), normalize(sunDirection)));
-  color *= (0.6 + sun * 0.55);
+  color *= (mix(vec3(0.32, 0.38, 0.25), skyColor * 0.65, 0.5) + sunColor * sun * 0.46);
+  float blade = abs(uv.x - 0.5);
+  if (blade > mix(0.5, 0.06, heightFrac)) discard;
+  color *= 0.88 + 0.12 * sin(worldPos.x * 1.7 + worldPos.z * 2.1);
 
   float fog = 1.0 - exp(-pow(distanceFromCamera * fogDensity, 2.0));
   vec3 lit = mix(color, skyColor, clamp(fog, 0.0, 1.0));
@@ -626,6 +646,7 @@ export class Scene {
     gl.uniform1i(this.shadowUniforms.albedo, 0);
     gl.uniform1i(this.shadowUniforms.boneTexture, 1);
 
+    this.postprocess = new Postprocess(gl);
     this.waterProgram = program(gl, WATER_VERTEX, WATER_FRAGMENT);
     this.waterUniforms = {
       viewProjection: gl.getUniformLocation(this.waterProgram, 'viewProjection'),
@@ -637,6 +658,7 @@ export class Scene {
       time: gl.getUniformLocation(this.waterProgram, 'time'),
       fogDensity: gl.getUniformLocation(this.waterProgram, 'fogDensity'),
     };
+    for (const name of ['sceneColor','sceneDepth','viewportSize']) this.waterUniforms[name]=gl.getUniformLocation(this.waterProgram,name);
     this.grassProgram = program(gl, GRASS_VERTEX, GRASS_FRAGMENT);
     this.grassUniforms = {
       viewProjection: gl.getUniformLocation(this.grassProgram, 'viewProjection'),
@@ -828,7 +850,7 @@ export class Scene {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
 
-    this.maxGrassInstances = 5000;
+    this.maxGrassInstances = 22000;
     this.grassInstanceData = new Float32Array(this.maxGrassInstances * 6);
     this.grassInstanceVbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.grassInstanceVbo);
@@ -851,54 +873,29 @@ export class Scene {
   }
 
   updateGrass(playerPos) {
-    if (this.grassGenerated || this.chunks.size < 2) return;
-    const px = playerPos ? playerPos[0] : 391.5;
-    const pz = playerPos ? playerPos[2] : 104.0;
-    const waterLevel = this.manifest.water ?? -999;
-    let count = 0;
-    const max = this.maxGrassInstances;
-
+    if (!playerPos) return;
+    const key = `${Math.floor(playerPos[0]/5)},${Math.floor(playerPos[2]/5)},${this.chunks.size},${this.stats.loading}`;
+    if (key === this.grassRegion) return;
+    this.grassRegion = key;
+    const nearby = [];
     for (const chunk of this.chunks.values()) {
-      if (chunk.pending || !chunk.positions || !chunk.indices) continue;
-      const b = chunk.bounds;
-      if (Math.hypot(b.min[0] - px, b.min[2] - pz) > 350 && Math.hypot(b.max[0] - px, b.max[2] - pz) > 350) continue;
-
-      const pos = chunk.positions, ind = chunk.indices;
-      const triCount = Math.floor(ind.length / 3);
-      for (let t = 0; t < triCount && count < max; t += 2) {
-        const i0 = ind[t * 3] * 3, i1 = ind[t * 3 + 1] * 3, i2 = ind[t * 3 + 2] * 3;
-        const y0 = pos[i0 + 1], y1 = pos[i1 + 1], y2 = pos[i2 + 1];
-        const avgY = (y0 + y1 + y2) / 3;
-        if (avgY < waterLevel + 1.2) continue;
-
-        const ax = pos[i1] - pos[i0], ay = y1 - y0, az = pos[i1 + 2] - pos[i0 + 2];
-        const bx = pos[i2] - pos[i0], by = y2 - y0, bz = pos[i2 + 2] - pos[i0 + 2];
-        const ny = ax * bz - az * bx;
-        const len = Math.hypot(ax * bz - az * bx, ay * bz - az * by, ax * by - ay * bx) || 1;
-        if (ny / len < 0.65) continue;
-
-        const x = (pos[i0] + pos[i1] + pos[i2]) / 3 + (Math.random() - 0.5) * 1.2;
-        const z = (pos[i0 + 2] + pos[i1 + 2] + pos[i2 + 2]) / 3 + (Math.random() - 0.5) * 1.2;
-        const y = avgY;
-
-        const at = count * 6;
-        this.grassInstanceData[at + 0] = x;
-        this.grassInstanceData[at + 1] = y;
-        this.grassInstanceData[at + 2] = z;
-        this.grassInstanceData[at + 3] = 0.75 + Math.random() * 0.55;
-        this.grassInstanceData[at + 4] = Math.random() * Math.PI * 2;
-        this.grassInstanceData[at + 5] = Math.random() < 0.3 ? (Math.random() < 0.5 ? 1 : 2) : 0;
-        count++;
+      if (chunk.pending) continue;
+      chunk.grass ??= scatterGrass(chunk, this.manifest.materials);
+      for (let at = 0; at < chunk.grass.length; at += 6) {
+        const d = Math.hypot(chunk.grass[at]-playerPos[0],chunk.grass[at+2]-playerPos[2]);
+        if (d < 72) nearby.push({data: chunk.grass, at, d});
       }
     }
-
-    if (count > 80) {
-      this.grassCount = count;
-      const gl = this.gl;
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.grassInstanceVbo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.grassInstanceData.subarray(0, count * 6));
-      this.grassGenerated = true;
+    nearby.sort((a,b)=>a.d-b.d);
+    this.grassCount = Math.min(nearby.length, this.maxGrassInstances);
+    for (let i=0;i<this.grassCount;i++) {
+      const {data,at}=nearby[i];
+      this.grassInstanceData.set(data.subarray(at,at+6),i*6);
     }
+    const gl=this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.grassInstanceVbo);
+    gl.bufferSubData(gl.ARRAY_BUFFER,0,this.grassInstanceData.subarray(0,this.grassCount*6));
+    this.stats.grass = this.grassCount;
   }
 
   drawGrass(camera, time) {
@@ -1095,7 +1092,7 @@ export class Scene {
       gl.bindVertexArray(chunk.vao);
       for (const primitive of chunk.primitives) {
         // Water and blended glass do not cast opaque rectangle shadows.
-        if (primitive.flags & 9) continue;
+        if ((primitive.flags & 1) || isWater(this.manifest.materials[primitive.material],primitive.flags)) continue;
         const material = this.manifest.materials[primitive.material] || {};
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.textureCache?.get(material.texture) || this.white);
@@ -1207,6 +1204,60 @@ export class Scene {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
     return this.rig;
+  }
+
+  async loadCompanion() {
+    const response = await fetch('game/chip.json');
+    if (!response.ok) return null;
+    const manifest = await response.json();
+    const geometry = await this.loadGeometry(manifest.file,44,true);
+    const animations = await (await fetch('game/chip_anims.json')).json();
+    const data = await (await fetch(animations.file)).arrayBuffer();
+    if (data.byteLength !== animations.bytes) throw new Error('Truncated Chip animation bank');
+    const rig = new Rig(animations,manifest,data);
+    const textureCache = await this.materialTextures(manifest.materials,'game/');
+    const gl = this.gl, boneTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,boneTexture);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,rig.count*4,1,0,gl.RGBA,gl.FLOAT,rig.skin);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    this.companion = Object.assign(geometry,{manifest,rig,textureCache,boneTexture,follow:new Companion()});
+    return this.companion;
+  }
+
+  drawCompanion(camera, dt, player, talking) {
+    const chip = this.companion;
+    if (!chip) return;
+    const follow = chip.follow.update(dt,player,talking);
+    chip.rig.update(dt,follow.animation);
+    const gl=this.gl, u=this.skinUniforms;
+    gl.useProgram(this.skinned);
+    gl.uniformMatrix4fv(u.viewProjection,false,camera.matrix);
+    gl.uniformMatrix4fv(u.model,false,placement(follow.position,follow.heading*180/Math.PI,1,0));
+    gl.uniformMatrix4fv(u.lightViewProjection,false,this.lightViewProjection);
+    gl.uniform3fv(u.cameraPosition,camera.position);
+    gl3(gl,u.skyColor,this.skyColour || [.55,.72,.88]);
+    this.bindLighting(u,follow.position,camera);
+    gl.uniform4f(u.tint,1,1,1,1);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D,chip.boneTexture);
+    gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,chip.rig.count*4,1,gl.RGBA,gl.FLOAT,chip.rig.skin);
+    gl.bindVertexArray(chip.vao);
+    for (const primitive of chip.primitives) {
+      const material=chip.manifest.materials[primitive.material];
+      this.bindMaterial(u,material,chip.textureCache);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D,chip.textureCache.get(material.texture)||this.white);
+      gl.uniform1f(u.alphaTest,.03);
+      gl.uniform1f(u.unlit,material.shader?.startsWith('IgnoreLight') ? 1 : 0);
+      if (material.flags&1) {gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);}
+      gl.disable(gl.CULL_FACE);
+      gl.drawElements(gl.TRIANGLES,primitive.indexCount,gl.UNSIGNED_SHORT,primitive.indexStart*2);
+      gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);
+      this.stats.drawCalls++;
+    }
+    gl.bindVertexArray(null);
+    this.stats.companion=follow.animation;
   }
 
   /** Load the set-data prop models (rings, springs, dash panels, goal ring). */
@@ -1406,7 +1457,7 @@ export class Scene {
       const material=this.manifest.materials[primitive.material] || {};
       const name=`${material.name || ''} ${material.shader || ''}`;
       // Vegetation cards and water surfaces are visuals, not solid walls.
-      const solid=primitive.flags===0 && !/water|leaf|leaves|foliage|flower|glass/i.test(name);
+      const solid=!(primitive.flags & 3) && !isWater(material,primitive.flags) && !/water|leaf|leaves|foliage|flower|glass/i.test(name);
       if(solid)solidTriangles.fill(1,primitive.indexStart/3,(primitive.indexStart+primitive.indexCount)/3);
     }
     for (let triangle = 0; triangle < indexCount / 3; triangle++) {
@@ -1456,6 +1507,7 @@ export class Scene {
     });
     for (const chunk of wanted) {
       if (this.chunks.has(chunk.name)) continue;
+      if (this.stats.loading >= 4) break;
       this.chunks.set(chunk.name, {pending: true});
       this.stats.loading++;
       this.chunk(chunk).then(mesh => {
@@ -1494,6 +1546,7 @@ export class Scene {
     const gl = this.gl;
     const time = options.time ?? performance.now() / 1000;
     const width = this.canvas.width, height = this.canvas.height;
+    this.postprocess.begin(width,height);
     gl.viewport(0, 0, width, height);
     const sky = this.skyColour || [0.55, 0.72, 0.88];
     gl.clearColor(sky[0], sky[1], sky[2], 1);
@@ -1532,6 +1585,8 @@ export class Scene {
     this.stats.drawCalls = 0;
     this.stats.triangles = 0;
     this.stats.chunks = 0;
+    this.stats.water = 0;
+    const waterDraws = [];
     for (const chunk of this.chunks.values()) {
       if (chunk.pending || !boundsVisible(chunk.bounds, camera.matrix)) continue;
       const centre=chunk.bounds.min.map((value,i)=>(value+chunk.bounds.max[i])*.5);
@@ -1539,29 +1594,8 @@ export class Scene {
       this.stats.chunks++;
       gl.bindVertexArray(chunk.vao);
       for (const primitive of chunk.primitives) {
-        const water = Boolean(primitive.flags & 8);
-        if (water) {
-          gl.useProgram(this.waterProgram);
-          gl.uniformMatrix4fv(this.waterUniforms.viewProjection, false, camera.matrix);
-          gl.uniformMatrix4fv(this.waterUniforms.model, false, identity);
-          gl.uniform3fv(this.waterUniforms.cameraPosition, camera.position);
-          gl.uniform3fv(this.waterUniforms.sunDirection, this.sunDirection);
-          gl.uniform3fv(this.waterUniforms.sunColor, this.sunColor);
-          gl.uniform3fv(this.waterUniforms.skyColor, sky);
-          gl.uniform1f(this.waterUniforms.time, time);
-          gl.uniform1f(this.waterUniforms.fogDensity, 0.0022);
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-          gl.depthMask(true);
-          gl.disable(gl.CULL_FACE);
-          gl.drawElements(gl.TRIANGLES, primitive.indexCount, gl.UNSIGNED_SHORT, primitive.indexStart * 2);
-          this.stats.drawCalls++;
-          this.stats.triangles += primitive.indexCount / 3;
-          gl.disable(gl.BLEND);
-          gl.enable(gl.CULL_FACE);
-          gl.useProgram(this.terrain);
-          continue;
-        }
+        const water = isWater(this.manifest.materials[primitive.material], primitive.flags);
+        if (water) {waterDraws.push({chunk,primitive});continue;}
         const material = this.manifest.materials[primitive.material] || {};
         this.bindMaterial(this.uniforms,material);
         const texture = material.texture ? this.textureCache?.get(material.texture) : null;
@@ -1591,8 +1625,34 @@ export class Scene {
       }
     }
     gl.bindVertexArray(null);
+    this.drawWater(camera,time,waterDraws);
     this.drawGrass(camera, time);
   }
+
+  drawWater(camera,time,draws) {
+    if (!draws.length) return;
+    const gl=this.gl,u=this.waterUniforms,opaque=this.postprocess.snapshot();
+    gl.useProgram(this.waterProgram);
+    gl.uniformMatrix4fv(u.viewProjection,false,camera.matrix);
+    gl.uniformMatrix4fv(u.model,false,placement([0,0,0],0,1,0));
+    gl.uniform3fv(u.cameraPosition,camera.position);
+    gl.uniform3fv(u.sunDirection,this.sunDirection);
+    gl.uniform3fv(u.sunColor,this.sunColor);
+    gl.uniform3fv(u.skyColor,this.skyColour || [.55,.72,.88]);
+    gl.uniform1f(u.time,time);gl.uniform1f(u.fogDensity,.0022);
+    gl.uniform2f(u.viewportSize,this.canvas.width,this.canvas.height);
+    gl.activeTexture(gl.TEXTURE6);gl.bindTexture(gl.TEXTURE_2D,opaque.color);gl.uniform1i(u.sceneColor,6);
+    gl.activeTexture(gl.TEXTURE7);gl.bindTexture(gl.TEXTURE_2D,opaque.depth);gl.uniform1i(u.sceneDepth,7);
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.disable(gl.CULL_FACE);
+    for(const {chunk,primitive} of draws){
+      gl.bindVertexArray(chunk.vao);
+      gl.drawElements(gl.TRIANGLES,primitive.indexCount,gl.UNSIGNED_SHORT,primitive.indexStart*2);
+      this.stats.drawCalls++;this.stats.water++;this.stats.triangles+=primitive.indexCount/3;
+    }
+    gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);gl.bindVertexArray(null);gl.activeTexture(gl.TEXTURE0);
+  }
+
+  present() {this.postprocess.present();}
 
   /** Draw Sonic: his skinned model, or the fallback spin ball. */
   drawCharacter(camera, matrix, spinning) {

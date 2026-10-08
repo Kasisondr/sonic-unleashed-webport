@@ -1,15 +1,15 @@
 # Sonic Unleashed Web Port — GitHub Handoff
 
-Updated: 7 October 2026.
+Updated: 8 October 2026.
 
 Repository: [Kasisondr/sonic-unleashed-webport](https://github.com/Kasisondr/sonic-unleashed-webport).
 
 ## What to push
 
 Push the **source project inside `unleashed-web`**, not the parent Downloads folder.
-Keep the folder structure intact. The source is already saved in local commit
-`8aee2e3`, with this guide in a separate local documentation commit.
-Git pushes both commits together; you do not need to upload files one by one.
+Keep the folder structure intact. The source is committed on `main` and published
+to the repository above. Commit subsequent source edits and push the branch; you
+do not need to upload files one by one.
 
 Include these root files:
 
@@ -177,6 +177,7 @@ tests/light-field.test.mjs
 tests/missions.test.mjs
 tests/player.test.mjs
 tests/pose.test.mjs
+tests/scenery.test.mjs
 tests/render-math.test.mjs
 tests/test_gameplay.py
 tests/test_graphics.py
@@ -213,6 +214,7 @@ tools/host_prelude.h
 tools/make_browser_context.py
 tools/menu_archive.py
 tools/mirage.py
+tools/prepare_chip.py
 tools/prepare_game_sfx.py
 tools/prepare_gameplay.py
 tools/prepare_graphics.py
@@ -233,6 +235,7 @@ upstream-pin.json
 web/audio.mjs
 web/cinematics.mjs
 web/collision.mjs
+web/companion.mjs
 web/csd-runtime.mjs
 web/index.html
 web/input.mjs
@@ -244,9 +247,11 @@ web/play.html
 web/play.mjs
 web/player.mjs
 web/pose.mjs
+web/postprocess.mjs
 web/render-math.mjs
 web/renderer.mjs
 web/routes.mjs
 web/scene.mjs
+web/vegetation.mjs
 web/style.css
 ```

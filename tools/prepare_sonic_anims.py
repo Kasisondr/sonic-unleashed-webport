@@ -84,14 +84,14 @@ def normalise(name):
     return name[:-3] if name.endswith("@LT") else name
 
 
-def build(iso):
+def build(iso, *, archive="Sonic", model_name="SonicRoot", output_name="sonic", animations=ANIMATIONS):
     disc = Disc(iso)
-    library = Library(disc, {"sonic": disc.open_archive("Sonic")})
-    character = json.loads((OUTPUT / "sonic.json").read_text())
+    library = Library(disc, {archive: disc.open_archive(archive)})
+    character = json.loads((OUTPUT / (output_name + ".json")).read_text())
     nodes = character["bones"]
     bind_inverse = [[[float(value) for value in row] for row in node["transform"]] for node in nodes]
 
-    skeleton = Packfile(library.payload("SonicRoot.skl.hkx")).skeleton()
+    skeleton = Packfile(library.payload(model_name + ".skl.hkx")).skeleton()
     bone_of_skeleton = {normalise(name): index for index, name in enumerate(skeleton["bones"])}
     node_of_bone = {}
     for index, node in enumerate(nodes):
@@ -147,7 +147,7 @@ def build(iso):
     # Prefer idle locals for unanimated bones, with true local bind transforms
     # as the fallback. The browser always uses the model's original inverse bind.
     rest = [None] * len(nodes)
-    for name, source, loop in ANIMATIONS:
+    for name, source, loop in animations:
         if name != "idle":
             continue
         idle = SplineAnimation(Packfile(library.payload(source + ".anm.hkx")))
@@ -157,7 +157,7 @@ def build(iso):
                 node = node_of_bone[bone]
                 rest[node] = {"position": list(position[track]), "rotation": list(rotation[track])}
         break
-    for name, source, loop in ANIMATIONS:
+    for name, source, loop in animations:
         payload = library.payload(source + ".anm.hkx")
         if payload is None:
             raise SystemExit(f"missing animation {source}")
@@ -190,14 +190,14 @@ def build(iso):
                         "duration": round(count / FPS, 4), "loop": loop, "source": source,
                         "peakPosition": round(peak, 3), "motion": "root" if peak > 1.0 else "inPlace"}
 
-    file = OUTPUT / "sonic_anims.bin"
+    file = OUTPUT / (output_name + "_anims.bin")
     file.write_bytes(data)
     manifest = {"file": f"game/{file.name}", "bytes": file.stat().st_size, "bones": len(nodes),
                 "stride": 14, "fps": FPS, "positionScale": POSITION_SCALE,
                 "quaternionScale": QUATERNION_SCALE, "parents": parents, "order": order,
                 "animations": frames,
-                "source": {"archive": "Sonic.ar.00", "skeleton": "SonicRoot.skl.hkx"}}
-    (OUTPUT / "sonic_anims.json").write_text(json.dumps(manifest))
+                "source": {"archive": archive, "skeleton": model_name + ".skl.hkx"}}
+    (OUTPUT / (output_name + "_anims.json")).write_text(json.dumps(manifest))
     total = sum(frame["frames"] for frame in frames.values())
     print(f"Exported {len(frames)} animations: {total} frames, {file.stat().st_size / 1e6:.2f} MB "
           f"({manifest['stride']} bytes per bone).")

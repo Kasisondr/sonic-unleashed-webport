@@ -75,7 +75,7 @@ are applied, with at most eight lights selected per draw.
   integration are required for exact visual parity.
 - Terrain GI atlases and UV1 mapping are recorded but not rendered. The
   renderer still lacks original HDR adaptation, bloom/star glare, depth of
-  field, motion blur, reflection/refraction and per-pixel static lighting.
+  field, motion blur, accurate reflections/refraction and per-pixel static lighting.
   Current water, grass, particles and some HUD elements are custom approximations.
   Normal-map tangents are reconstructed from derivatives, not original tangent
   streams; UV1 material channels and border/mirror-once wrap are unsupported.
@@ -128,3 +128,30 @@ are applied, with at most eight lights selected per draw.
 See README.md for regeneration commands. Reference observations are in
 [docs/reference-audit.md](docs/reference-audit.md). The complete five-hour video
 has not been watched; no unobserved behaviour is claimed reproduced.
+
+## Scenery and companion update — 8 October 2026
+
+- Added local `prepare_chip.py` export of the original WhipRoot model, 112 bones,
+  four textures and four original animation clips. Chip follows Sonic and talks
+  during hints; the follow behaviour is custom browser code.
+- Replaced one-time random grass placement with deterministic, material-aware
+  surface sampling and streaming nearby instances. Flowers are sparse rather
+  than present on every grass tuft; pavement and vegetation cards are excluded.
+- Fixed material/primitive water flag mismatch, enabled animated sea shading,
+  scene refraction and depth-based shoreline foam. Water is excluded from solid
+  collision and opaque shadow casting. Sky reflection remains an approximation.
+- Added restrained bloom from a quarter-resolution separable highlight blur.
+  Scene targets are recreated after canvas resize. This is an LDR browser effect,
+  not a restoration of the original game HDR pipeline.
+- Limited simultaneous terrain fetches to four to avoid connection overload.
+
+Validation: 30 JavaScript tests and 19 Python tests pass. Companion continuity,
+triangle scatter bounds, material classification and existing gameplay are
+covered. Exact original lighting/graphics parity remains unfinished.
+
+Browser verification: Windmill renders through the bloom pipeline with terrain,
+18,274 nearby grass instances, one visible water primitive and an active Chip
+rig. Shader/GL diagnostics reported zero errors. Final movement screenshots
+could not be captured after the browser automation connection became unavailable;
+visual checks of Chip following and shoreline foam remain limited. Existing jump
+and loop asset checks still pass with water excluded from solid geometry.

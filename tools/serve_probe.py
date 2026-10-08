@@ -10,6 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def log_message(self, format, *args):
+        # A long play session can fill an unattended terminal's output pipe;
+        # blocked logging then stalls asset responses. Still report HTTP errors.
+        if len(args) > 1 and str(args[1]).isdigit() and int(args[1]) >= 400:
+            super().log_message(format, *args)
+
     def send_head(self):
         self.byte_range = None
         requested = self.headers.get('Range')
@@ -60,6 +66,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    ThreadingHTTPServer.request_queue_size = 64
     server = ThreadingHTTPServer(("127.0.0.1", 8778), partial(Handler, directory=str(ROOT / "dist/probe")))
     print("Runtime probe: http://127.0.0.1:8778 (game is not booted)", flush=True)
     server.serve_forever()

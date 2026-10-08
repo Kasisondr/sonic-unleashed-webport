@@ -100,10 +100,10 @@ def write_geometry(path, geometry):
     path.write_bytes(header + table + bytes(vertices) + struct.pack(f"<{len(indices)}H", *indices))
 
 
-def build(iso, limit=512):
+def build(iso, limit=512, *, archive="Sonic", model_name="SonicRoot", output_name="sonic"):
     disc = Disc(iso)
-    library = Library(disc, {"sonic": disc.open_archive("Sonic")})
-    model = parse_model(library.payload("SonicRoot.model"))
+    library = Library(disc, {archive: disc.open_archive(archive)})
+    model = parse_model(library.payload(model_name + ".model"))
     materials, textures, material_index = [], {}, {}
 
     def material_slot(name, slot):
@@ -140,7 +140,7 @@ def build(iso, limit=512):
     geometry = export_geometry(meshes, slots)
     if geometry is None:
         raise FormatError("character model produced no geometry")
-    file = OUTPUT / "sonic.bin"
+    file = OUTPUT / (output_name + ".bin")
     write_geometry(file, geometry)
 
     # Per-mesh bone tables: vertex blend indices are local slots into these lists,
@@ -157,9 +157,9 @@ def build(iso, limit=512):
     manifest = {"file": f"game/{file.name}", "bytes": file.stat().st_size, "materials": materials,
                 "textures": textures, "meshes": mesh_table, "bones": bones,
                 "vertices": len(geometry[0]) // 3, "triangles": len(geometry[3]) // 3,
-                "source": {"archive": "Sonic.ar.00", "model": "SonicRoot.model"}}
-    (OUTPUT / "sonic.json").write_text(json.dumps(manifest))
-    print(f"Exported Sonic: {manifest['triangles']} triangles, {len(materials)} materials, "
+                "source": {"archive": archive, "model": model_name + ".model"}}
+    (OUTPUT / (output_name + ".json")).write_text(json.dumps(manifest))
+    print(f"Exported {output_name}: {manifest['triangles']} triangles, {len(materials)} materials, "
           f"{len(bones)} bones, {len(textures)} textures ({file.stat().st_size / 1e6:.1f} MB).")
     return manifest
 

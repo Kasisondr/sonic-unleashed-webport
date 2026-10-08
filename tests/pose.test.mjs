@@ -50,3 +50,31 @@ test('all exported poses keep Sonic and his fingers within character bounds', {s
     }
   }
 });
+
+test('all exported Chip flight and talk poses keep his limbs and wings bounded', {skip:!fs.existsSync('dist/probe/game/chip_anims.bin')}, () => {
+  const c=JSON.parse(fs.readFileSync('dist/probe/game/chip.json'));
+  const a=JSON.parse(fs.readFileSync('dist/probe/game/chip_anims.json'));
+  const raw=fs.readFileSync('dist/probe/game/chip_anims.bin');
+  const rig=new Rig(a,c,raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength));
+  const mesh=fs.readFileSync('dist/probe/game/chip.bin'),dv=new DataView(mesh.buffer,mesh.byteOffset,mesh.byteLength);
+  const count=dv.getUint32(8,true),start=16+dv.getUint32(4,true)*24;
+  for(const [name,spec] of Object.entries(a.animations)) {
+    for (const sample of [0,.25,.5,.75,.99]) {
+      rig.state=name;rig.time=sample*spec.duration;rig.fade=0;rig.update(0,name);
+      const low=[Infinity,Infinity,Infinity],high=[-Infinity,-Infinity,-Infinity];
+      for(let v=0;v<count;v++) {
+        const at=start+v*44,p=[0,1,2].map(k=>dv.getFloat32(at+k*4,true));
+        const w=[0,1,2,3].map(k=>dv.getUint8(at+40+k)),total=w.reduce((a,b)=>a+b,0);
+        assert.ok(total>0);
+        const out=[0,0,0];
+        for(let k=0;k<4;k++) {
+          const b=dv.getUint8(at+36+k)*16;
+          for(let d=0;d<3;d++)out[d]+=(rig.skin[b+d]*p[0]+rig.skin[b+4+d]*p[1]+rig.skin[b+8+d]*p[2]+rig.skin[b+12+d])*w[k]/total;
+        }
+        out.forEach((value,d)=>{assert.ok(Number.isFinite(value),name);low[d]=Math.min(low[d],value);high[d]=Math.max(high[d],value);});
+      }
+      high.forEach((value,d)=>assert.ok(value-low[d]<1.4,`${name} axis ${d} is stretched: ${value-low[d]}`));
+      if(name==='ball')assert.ok(high[1]-low[1]<.85,'Ball pose should be compact');
+    }
+  }
+});

@@ -60,6 +60,7 @@ vgmstream helpers described below. Extracted/derived assets stay in ignored
 .tools/bin/python tools/prepare_stage.py "<iso>"
 .tools/bin/python tools/prepare_sonic.py "<iso>"
 .tools/bin/python tools/prepare_sonic_anims.py "<iso>"
+.tools/bin/python tools/prepare_chip.py "<iso>"
 .tools/bin/python tools/prepare_sky.py "<iso>"
 .tools/bin/python tools/prepare_ui.py "<iso>"
 .tools/bin/python tools/prepare_menu.py "<iso>"
@@ -194,3 +195,17 @@ Visit <http://127.0.0.1:8778>. The server serves only `dist/probe`. If the previ
 | `dist/probe/` | Developer runtime preview; ignored |
 
 Game inputs and generated game code remain local and are excluded from Git. The upstream project and its dependencies retain their respective licenses; attribution and license files are in the pinned checkout. This checkpoint does not produce a distributable game build.
+
+### Scenery and Chip
+
+Chip uses the disc's `WhipRoot` model and four original animations. He follows
+Sonic, resets at checkpoints and talks during the browser hint prompts. His
+follow behaviour is a browser addition; original companion AI is not running.
+
+Grass and sparse wildflowers are instanced on grass materials, anchored to
+terrain triangles, sway with wind and stream around Sonic. Water now uses the
+exported water material flags, has animated highlights, depth-based shoreline
+foam and refraction of the opaque scene. Water does not block movement or cast
+solid shadows. A small bloom pass spreads bright highlights. These effects
+improve the prototype; they do not reproduce the original HDR, fur, GI atlas or
+reflection pipeline exactly. All extracted Chip assets remain local and ignored.

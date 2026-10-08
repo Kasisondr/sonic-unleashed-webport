@@ -346,8 +346,9 @@ function frame(now) {
       scene.renderShadows(player.position, characterMatrix);
       scene.draw(scene.camera, {time: now / 1000});
       scene.drawCharacter(scene.camera, characterMatrix, rolling);
+      scene.drawCompanion(scene.camera, dt, player, chipTimer > 0);
       status.character = scene.character ? (rigged ? 'skinned' : (rolling ? 'ball' : 'model')) : 'missing';
-      // Splash down: the sea surface is solid geometry, so treat it as water.
+      // The ocean is visual geometry; falling below sea level causes a retry.
       if (mission.controllable && manifest.water !== null && manifest.water !== undefined && player.position[1] < manifest.water + 0.6) {
         mission.die('Fell into the water');
       }
@@ -370,7 +371,8 @@ function frame(now) {
       status.chunks = scene.chunks.size;
       if (status.frames % 6 === 0) {
         Object.assign($('diagnostics').dataset, {
-          water: String(manifest.water), state: player.state, frames: String(status.frames), chunks: String(scene.chunks.size),
+          waterHeight: String(manifest.water), state: player.state, frames: String(status.frames), chunks: String(scene.chunks.size),
+          grass: String(scene.stats.grass || 0), water: String(scene.stats.water || 0), companion: scene.stats.companion || 'missing',
           loading: String(scene.stats.loading), drawCalls: String(scene.stats.drawCalls),
           triangles: String(scene.stats.triangles), position: player.position.map(v => v.toFixed(1)).join(','),
           speed: player.speed.toFixed(1), grounded: String(player.grounded), rings: String(player.ringCount),
@@ -586,6 +588,7 @@ async function boot() {
   }
   $('load-status').textContent = `Streaming ${manifest.chunks.length} terrain chunks…`;
   await scene.prepareTextures();
+  await scene.loadCompanion().catch(error => console.warn('Chip unavailable', error));
   await scene.loadCharacter().catch(error => console.warn('character unavailable', error));
   await scene.loadRig().catch(error => console.warn('animations unavailable', error));
   await scene.loadProps().catch(error => console.warn('props unavailable', error));

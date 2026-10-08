@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+import {isWater} from '../web/vegetation.mjs';
 import {Player} from '../web/player.mjs';
 const root='dist/probe/',m=JSON.parse(fs.readFileSync(root+'game/stage.json')),chunks=new Map();
 for(const spec of m.chunks){
@@ -7,7 +8,7 @@ for(const spec of m.chunks){
  const primitives=v.getUint32(4,true),count=v.getUint32(8,true),indexCount=v.getUint32(12,true),at=16+primitives*24,end=at+count*36;
  const p=new Float32Array(count*3);for(let i=0;i<count;i++)for(let k=0;k<3;k++)p[i*3+k]=v.getFloat32(at+i*36+k*4,true);
  const indices=new Uint16Array(data.buffer.slice(data.byteOffset+end,data.byteOffset+end+indexCount*2)),grid=new Map(),solidTriangles=new Uint8Array(indexCount/3);
- for(let i=0;i<primitives;i++){const offset=16+i*24,material=m.materials[v.getUint32(offset,true)]||{};if(v.getUint32(offset+4,true)===0&&!/water|leaf|leaves|foliage|flower|glass/i.test(`${material.name} ${material.shader}`))solidTriangles.fill(1,v.getUint32(offset+8,true)/3,(v.getUint32(offset+8,true)+v.getUint32(offset+12,true))/3);}
+ for(let i=0;i<primitives;i++){const offset=16+i*24,material=m.materials[v.getUint32(offset,true)]||{};if(!(v.getUint32(offset+4,true)&3)&&!isWater(material,v.getUint32(offset+4,true))&&!/water|leaf|leaves|foliage|flower|glass/i.test(`${material.name} ${material.shader}`))solidTriangles.fill(1,v.getUint32(offset+8,true)/3,(v.getUint32(offset+8,true)+v.getUint32(offset+12,true))/3);}
  for(let i=0;i<indexCount/3;i++){const a=indices[i*3]*3,b=indices[i*3+1]*3,c=indices[i*3+2]*3;
  const minX=Math.floor(Math.min(p[a],p[b],p[c])/8),maxX=Math.floor(Math.max(p[a],p[b],p[c])/8),minZ=Math.floor(Math.min(p[a+2],p[b+2],p[c+2])/8),maxZ=Math.floor(Math.max(p[a+2],p[b+2],p[c+2])/8);
  if((maxX-minX+1)*(maxZ-minZ+1)>4096)continue;
