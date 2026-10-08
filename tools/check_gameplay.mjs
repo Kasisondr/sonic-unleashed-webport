@@ -16,6 +16,20 @@ for(const spec of m.chunks){
  chunks.set(spec.name,{positions:p,indices,grid,solidTriangles,bounds:spec.bounds});}
 const scene={chunks,manifest:m},neutral={forward:true,steer:0,boost:false,drift:0,jump:false,lookY:0};
 const checks=[];
+for (const pad of m.objects.filter(o=>o.kind==='dashpanel')) for (const hz of [20,30,60]) {
+ const player=new Player(scene,pad.position,pad.yaw);
+ for(let i=0;i<20;i++)player.update(1/60,{...neutral,forward:false});
+ assert.ok(player.grounded,`Dash pad ${pad.name} has no starting ground`);
+ player.activateDash(pad);
+ for(let i=0;i<Math.ceil(hz*.2);i++) {
+  player.update(1/hz,neutral);
+  const surface=player.ground(player.position[0],player.position[2],player.position[1]);
+  if(surface && !player.routes.active)assert.ok(player.position[1]-1.1>=surface.y-.01,
+   `Dash pad ${pad.name} at ${hz}Hz fell through terrain`);
+  assert.ok(player.position.every(Number.isFinite));
+ }
+ checks.push({pad:pad.name,hz,position:player.position});
+}
 for(const id of ['2351','2355'])for(const hz of [30,60])for(const boost of [false,true]) {
  const board=m.objects.find(o=>o.kind==='jumpboard'&&o.name===id);
  assert.ok(board,`Missing original board ${id}`);

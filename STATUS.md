@@ -155,3 +155,19 @@ rig. Shader/GL diagnostics reported zero errors. Final movement screenshots
 could not be captured after the browser automation connection became unavailable;
 visual checks of Chip following and shoreline foam remain limited. Existing jump
 and loop asset checks still pass with water excluded from solid geometry.
+
+## Dash-pad ground collision fix — 8 October 2026
+
+The source dash pads can apply 70–100 m/s impulses. Capsule walls were swept in
+small steps, but feet were grounded only at the final frame position. Uphill
+terrain could pass above Sonic's feet and then push the capsule farther under
+the ramp. Grounded movement now follows nearby terrain before each 20 cm capsule
+step and resolves floor contact after it. Airborne landings still require a
+surface crossing, and genuine gaps still allow falling.
+
+Validation: the uphill regression failed before the fix and now passes uphill
+and downhill at 20/30/60 Hz without reducing pad speed. All 20 Windmill dash-pad
+placements passed on extracted terrain at those three rates (60 trials), along
+with the existing eight island-jump trials and two loop checks. The wall, ceiling,
+camera and genuine-gap regression tests also pass. The local preview player
+module is updated; these checks run against the source controller and disc data.

@@ -199,32 +199,17 @@ export class Player {
       this.resetCamera();
     }
     const step = [this.velocity[0] * dt, this.velocity[1] * dt, this.velocity[2] * dt];
-    const contact = guided ? {position:guided.position,wall:false} : moveCapsule(this.scene, this.position, step, this.velocity);
-    const next = contact.position;
-    if (contact.wall) this.speed = Math.hypot(this.velocity[0],this.velocity[2]);
-    const surface = this.ground(next[0], next[2], this.position[1], 1.1);
+    let next;
     if (guided) {
+      next=guided.position;
       this.speed=guidedSpeed;this.grounded=true;
       this.velocity=guided.tangent.map(v=>v*this.speed);
       if(Math.hypot(guided.tangent[0],guided.tangent[2])>.15)
         this.heading=Math.atan2(guided.tangent[0],guided.tangent[2]);
-    } else if (surface !== null && this.position[1]-PLAYER_HEIGHT >= surface.y-(this.grounded?.45:.2)
-        && next[1] - PLAYER_HEIGHT <= surface.y && this.velocity[1] <= 0.01) {
-      next[1] = surface.y + PLAYER_HEIGHT;
-      this.grounded = true;
-      this.groundNormal = surface.normal;
-      this.velocity[1] = 0;
     } else {
-      this.grounded = false;
-      const ahead = this.ground(next[0] + Math.sin(this.heading) * 2.5, next[2] + Math.cos(this.heading) * 2.5,
-        next[1], 1.1);
-      this.ahead = ahead;
-    }
-    // Block impossible upward steps so Sonic cannot climb walls by sliding into them.
-    if (!guided && surface !== null && surface.y > this.position[1] + 2.2 && this.grounded === false) {
-      next[0] = this.position[0];
-      next[2] = this.position[2];
-      this.speed *= 0.2;
+      next=this.moveOnTerrain(step);
+      if (!this.grounded) this.ahead=this.ground(next[0]+Math.sin(this.heading)*2.5,
+        next[2]+Math.cos(this.heading)*2.5,next[1],1.1);
     }
     this.position = next;
     if (this.grounded && !this.wasGrounded) {
@@ -263,6 +248,35 @@ export class Player {
     }
     this.camera.position = cameraObstruction(this.scene,this.camera.lookAt,this.camera.position);
     return this.position;
+  }
+
+  /** Resolve feet as well as capsule contacts throughout a high-speed move. */
+  moveOnTerrain(delta) {
+    const steps=Math.max(1,Math.ceil(Math.hypot(...delta)/.2));
+    let position=[...this.position];
+    for(let i=0;i<steps;i++) {
+      const movement=delta.map(v=>v/steps);
+      if(this.grounded) {
+        const target=this.ground(position[0]+movement[0],position[2]+movement[2],position[1],1.1);
+        if(target && Math.abs(target.y-(position[1]-PLAYER_HEIGHT))<=.45)
+          movement[1]=target.y+PLAYER_HEIGHT-position[1];
+      }
+      const contact=moveCapsule(this.scene,position,movement,this.velocity);
+      const next=contact.position;
+      if(contact.wall)this.speed=Math.hypot(this.velocity[0],this.velocity[2]);
+      const surface=this.ground(next[0],next[2],position[1],1.1);
+      const feet=position[1]-PLAYER_HEIGHT;
+      // Follow modest slope changes only while already grounded. Airborne
+      // landings must cross the surface from above; roofs and gaps stay solid.
+      const follows=this.grounded && surface && Math.abs(surface.y-feet)<=.45;
+      const crosses=surface && feet>=surface.y-.2 && next[1]-PLAYER_HEIGHT<=surface.y;
+      if(surface && (follows || (crosses && this.velocity[1]<=.01))) {
+        next[1]=surface.y+PLAYER_HEIGHT;
+        this.grounded=true;this.groundNormal=surface.normal;this.velocity[1]=0;
+      } else this.grounded=false;
+      position=next;
+    }
+    return position;
   }
 
   activateDash(object) {

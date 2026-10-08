@@ -8,6 +8,35 @@ function floor(height=0) {
   return {manifest:{spawn:[0,height,0],deadHeight:-260},chunks:new Map([['floor',{positions,indices,grid,bounds:{min:[-100,height,-100],max:[100,height,100]}}]])};
 }
 const neutral={forward:false,steer:0,boost:false,drift:0,jump:false,lookY:0};
+test('100m/s dash pads keep Sonic above uphill and downhill terrain at 20/30/60Hz',()=>{
+  for(const slope of [.4,-.4])for(const hz of [20,30,60]) {
+    const scene=floor(),mesh=scene.chunks.get('floor');
+    for(let at=0;at<mesh.positions.length;at+=3)mesh.positions[at+1]=mesh.positions[at+2]*slope;
+    mesh.bounds.min[1]=-40;mesh.bounds.max[1]=40;
+    const player=new Player(scene,[0,0,0],90);
+    for(let i=0;i<20;i++)player.update(1/60,neutral);
+    assert.ok(player.grounded);
+    player.activateDash({rotation:[0,1,0,0],launch:{Speed:100,OutOfControl:.5}});
+    for(let i=0;i<hz*.4;i++) {
+      player.update(1/hz,{...neutral,forward:true});
+      const floorY=player.position[2]*slope;
+      assert.ok(player.position[1]-1.1>=floorY-1e-4,`slope ${slope}, ${hz}Hz: Sonic is under the ramp`);
+      assert.ok(player.grounded,`slope ${slope}, ${hz}Hz: pad lost ground contact`);
+    }
+    assert.ok(player.position[2]>25,'Pad impulse should still propel Sonic');
+  }
+});
+test('dash pad ground following does not keep Sonic floating over a real gap',()=>{
+  const scene=floor(),mesh=scene.chunks.get('floor');
+  mesh.positions[8]=2;mesh.positions[11]=2;mesh.bounds.max[2]=2;
+  const player=new Player(scene,[0,0,0],90);
+  for(let i=0;i<20;i++)player.update(1/60,neutral);
+  player.activateDash({rotation:[0,1,0,0],launch:{Speed:100,OutOfControl:.5}});
+  for(let i=0;i<20;i++)player.update(1/30,{...neutral,forward:true});
+  assert.ok(player.position[2]>10);
+  assert.equal(player.grounded,false);
+  assert.ok(player.position[1]<0,'Gravity must still pull Sonic into genuine gaps');
+});
 test('run and boost move across solid terrain, then jump returns to it',()=>{
   const player=new Player(floor(),[0,0,0],90);
   for(let i=0;i<20;i++)player.update(1/60,neutral);
